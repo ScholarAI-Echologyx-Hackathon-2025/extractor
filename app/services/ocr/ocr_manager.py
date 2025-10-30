@@ -6,6 +6,7 @@ import base64
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from app.config import settings
+from app.utils.helpers import async_retry
 
 logger = logging.getLogger(__name__)
 
@@ -124,66 +125,63 @@ class OCRManager:
         """Post to OCR.space with retry/backoff on transient errors."""
         timeout = getattr(settings, 'ocr_timeout', 30)
         max_retries = max(0, getattr(settings, 'ocr_max_retries', 2))
-        backoff = 1.0
-        last_err = None
-        for attempt in range(max_retries + 1):
-            try:
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    response = await client.post(self.api_url, data=data)
-                    # retry on 429/5xx
-                    if response.status_code in (429, 500, 502, 503, 504):
-                        last_err = f"HTTP {response.status_code}"
-                        raise httpx.HTTPStatusError("transient", request=response.request, response=response)
-                    response.raise_for_status()
-                    result = response.json()
-                    if result.get('IsErroredOnProcessing'):
-                        err_msg = result.get('ErrorMessage')
-                        logger.error(f"OCR.space API error: {err_msg}")
-                        return None
-                    # Process successful results
-                    parsed_results = result.get('ParsedResults', [])
-                    if not parsed_results:
-                        logger.warning("No parsed results from OCR.space API")
-                        return None
-                    extracted_text = ""
-                    word_data: List[Dict[str, Any]] = []
-                    for parsed_result in parsed_results:
-                        if parsed_result.get('FileParseExitCode') == 1:  # Success
-                            parsed_text = parsed_result.get('ParsedText', '')
-                            extracted_text += parsed_text + "\n"
-                            text_overlay = parsed_result.get('TextOverlay')
-                            if text_overlay and text_overlay.get('HasOverlay'):
-                                lines = text_overlay.get('Lines', [])
-                                for line in lines:
-                                    words = line.get('Words', [])
-                                    for word in words:
-                                        word_data.append({
-                                            'text': word.get('WordText', ''),
-                                            'left': word.get('Left', 0),
-                                            'top': word.get('Top', 0),
-                                            'width': word.get('Width', 0),
-                                            'height': word.get('Height', 0)
-                                        })
-                    return {
-                        'text': extracted_text.strip(),
-                        'words': word_data,
-                        'provider': 'ocr_space',
-                        'confidence': 0.8,  # OCR.space doesn't provide confidence scores
-                        'processing_time': result.get('ProcessingTimeInMilliseconds', 0)
-                    }
-            except (httpx.TimeoutException, httpx.HTTPError) as e:
-                last_err = str(e)
-                if attempt < max_retries:
-                    await asyncio.sleep(backoff)
-                    backoff *= 2
-                    continue
-                logger.error(f"OCR request failed after retries: {last_err}")
+
+        async def do_post() -> Dict[str, Any]:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(self.api_url, data=data)
+                if response.status_code in (429, 500, 502, 503, 504):
+                    raise httpx.HTTPStatusError("transient", request=response.request, response=response)
+                response.raise_for_status()
+                result = response.json()
+                if result.get('IsErroredOnProcessing'):
+                    err_msg = result.get('ErrorMessage')
+                    logger.error(f"OCR.space API error: {err_msg}")
+                    return {}
+                return result
+
+        try:
+            result = await async_retry(
+                do_post,
+                max_retries=max_retries,
+                backoff_initial=1.0,
+                exceptions=(httpx.TimeoutException, httpx.HTTPError),
+                on_error=lambda e, a: logger.debug(f"OCR post retry {a+1} due to {e}")
+            )
+            if not result:
                 return None
-            except Exception as e:
-                logger.error(f"Unexpected OCR request error: {e}")
+            parsed_results = result.get('ParsedResults', [])
+            if not parsed_results:
+                logger.warning("No parsed results from OCR.space API")
                 return None
-        logger.error(f"OCR request failed: {last_err}")
-        return None
+            extracted_text = ""
+            word_data: List[Dict[str, Any]] = []
+            for parsed_result in parsed_results:
+                if parsed_result.get('FileParseExitCode') == 1:
+                    parsed_text = parsed_result.get('ParsedText', '')
+                    extracted_text += parsed_text + "\n"
+                    text_overlay = parsed_result.get('TextOverlay')
+                    if text_overlay and text_overlay.get('HasOverlay'):
+                        lines = text_overlay.get('Lines', [])
+                        for line in lines:
+                            words = line.get('Words', [])
+                            for word in words:
+                                word_data.append({
+                                    'text': word.get('WordText', ''),
+                                    'left': word.get('Left', 0),
+                                    'top': word.get('Top', 0),
+                                    'width': word.get('Width', 0),
+                                    'height': word.get('Height', 0)
+                                })
+            return {
+                'text': extracted_text.strip(),
+                'words': word_data,
+                'provider': 'ocr_space',
+                'confidence': 0.8,
+                'processing_time': result.get('ProcessingTimeInMilliseconds', 0)
+            }
+        except Exception as e:
+            logger.error(f"OCR request failed: {e}")
+            return None
     
     async def extract_text_from_url(self, image_url: str) -> Optional[Dict[str, Any]]:
         """Extract text from image URL directly using OCR.space API"""
