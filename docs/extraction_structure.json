@@ -1,0 +1,104 @@
+{
+    "id": "unique-uuid",
+    "pdf_path": "path/to/pdf",
+    "pdf_hash": "sha256-hash",
+    "extraction_timestamp": "2025-08-21 18:11:49.834271",
+    
+    "metadata": {
+      "title": "string",
+      "authors": [{"name": "string", "affiliation": "string|null", ...}],
+      "abstract": "string|null",
+      "keywords": ["string"],
+      "doi": "string|null",
+      "arxiv_id": "string|null",
+      "year": "number|null",
+      "venue": "string|null",
+      "language": "string",
+      "page_count": "number"
+    },
+    
+    "sections": [
+      {
+        "id": "uuid",
+        "title": "string",
+        "type": "string",
+        "level": "number",
+        "page_start": "number",
+        "page_end": "number",
+        "paragraphs": [{"text": "string", "page": "number", ...}]
+      }
+    ],
+    
+    "figures": [
+      {
+        "id": "uuid",
+        "label": "string|null",
+        "caption": "string|null",
+        "page": "number",
+        "bbox": {"x1": "number", "y1": "number", ...},
+        "image_path": "string|null",
+        "type": "string"
+      }
+    ],
+    
+    "tables": [
+      {
+        "id": "uuid",
+        "label": "string|null",
+        "caption": "string|null",
+        "page": "number",
+        "headers": [["string"]],
+        "rows": [["string"]],
+        "csv_path": "string|null",
+        "html": "string|null"
+      }
+    ],
+    
+    "equations": [
+      {
+        "id": "uuid",
+        "label": "string|null",
+        "latex": "string",
+        "page": "number",
+        "inline": "boolean"
+      }
+    ],
+    
+    "code_blocks": [
+      {
+        "id": "uuid",
+        "language": "string|null",
+        "code": "string",
+        "page": "number"
+      }
+    ],
+    
+    "references": [
+      {
+        "id": "uuid",
+        "raw_text": "string",
+        "title": "string|null",
+        "authors": ["string"],
+        "year": "number|null",
+        "doi": "string|null"
+      }
+    ],
+    
+    "entities": [
+      {
+        "id": "uuid",
+        "type": "string",
+        "name": "string",
+        "page": "number",
+        "confidence": "number"
+      }
+    ],
+    
+    "status": "completed|failed|processing",
+    "extraction_methods": ["string"],
+    "processing_time": "number",
+    "errors": ["string"],
+    "warnings": ["string"],
+    "extraction_coverage": "number",
+    "confidence_scores": {"text": "number", "tables": "number", ...}
+  }
