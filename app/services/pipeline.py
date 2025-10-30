@@ -328,23 +328,49 @@ class ExtractionPipeline:
             
             doc = fitz.open(pdf_path)
             sections = []
+            # Collect candidate headers/footers by sampling first/last lines across pages
+            first_lines = {}
+            last_lines = {}
+            page_texts = []
             
             for page_num in range(len(doc)):
                 page = doc.load_page(page_num)
                 text = page.get_text()
-                
-                if text.strip():
-                    # Split text into paragraphs for better structure
-                    paragraphs = self._split_text_into_paragraphs(text.strip())
-                    
-                    # Create a simple section for each page
-                    section = Section(
-                        title=f"Page {page_num + 1}",
-                        page_start=page_num + 1,
-                        page_end=page_num + 1,
-                        paragraphs=[Paragraph(text=para, page=page_num + 1) for para in paragraphs if para.strip()]
-                    )
-                    sections.append(section)
+                page_texts.append(text or "")
+                lines = [l.strip() for l in (text or "").splitlines() if l.strip()]
+                if lines:
+                    first = lines[0]
+                    last = lines[-1]
+                    first_lines[first] = first_lines.get(first, 0) + 1
+                    last_lines[last] = last_lines.get(last, 0) + 1
+
+            # Determine repeated header/footer candidates (appearing on many pages)
+            threshold = max(2, int(0.3 * max(1, len(doc))))
+            header_candidates = {t for t,c in first_lines.items() if c >= threshold}
+            footer_candidates = {t for t,c in last_lines.items() if c >= threshold}
+
+            # Build sections with header/footer removed and improved paragraph splitting
+            for page_num, text in enumerate(page_texts):
+                if not text or not text.strip():
+                    continue
+                lines = [l for l in text.splitlines()]
+                # Remove header/footer if they match candidates
+                if lines:
+                    if lines[0].strip() in header_candidates:
+                        lines = lines[1:]
+                    if lines and lines[-1].strip() in footer_candidates:
+                        lines = lines[:-1]
+                cleaned_text = "\n".join(lines).strip()
+                if not cleaned_text:
+                    continue
+                paragraphs = self._split_text_into_paragraphs(cleaned_text)
+                section = Section(
+                    title=f"Page {page_num + 1}",
+                    page_start=page_num + 1,
+                    page_end=page_num + 1,
+                    paragraphs=[Paragraph(text=para, page=page_num + 1) for para in paragraphs if para.strip()]
+                )
+                sections.append(section)
             
             # Get page count before closing the document
             page_count = len(doc)

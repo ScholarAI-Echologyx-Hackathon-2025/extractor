@@ -105,7 +105,7 @@ class GROBIDExtractor:
     async def _ensure_client(self):
         """Ensure HTTP client is initialized"""
         if self.client is None:
-            self.client = httpx.AsyncClient(timeout=180.0)
+            self.client = httpx.AsyncClient(timeout=getattr(settings, 'grobid_timeout', 180))
     
     async def check_service(self) -> bool:
         """Check if GROBID service is available"""
@@ -114,8 +114,8 @@ class GROBIDExtractor:
             
         try:
             await self._ensure_client()
-            response = await self.client.get(f"{self.grobid_url}/api/isalive")
-            self._service_available = response.status_code == 200
+            response = await self._get_with_retries(f"{self.grobid_url}/api/isalive")
+            self._service_available = bool(response and response.status_code == 200)
             return self._service_available
         except Exception as e:
             logger.warning(f"GROBID service unavailable: {e}")
@@ -169,28 +169,68 @@ class GROBIDExtractor:
             raise ExtractionError(f"GROBID extraction failed: {str(e)}")
     
     async def _process_fulltext(self, pdf_path: Path) -> str:
-        """Process PDF with GROBID fulltext endpoint"""
+        """Process PDF with GROBID fulltext endpoint (with retry/backoff)"""
         await self._ensure_client()
-        
         with open(pdf_path, 'rb') as f:
             files = {'input': (pdf_path.name, f, 'application/pdf')}
-            
-            response = await self.client.post(
-                f"{self.grobid_url}/api/processFulltextDocument",
-                files=files,
-                data={
-                    'consolidateHeader': '1',
-                    'consolidateCitations': '1',
-                    'includeRawCitations': '1',
-                    'includeRawAffiliations': '1',
-                    'teiCoordinates': 'true'
-                }
-            )
-            
-            if response.status_code != 200:
-                raise ExtractionError(f"GROBID API error: {response.status_code}")
-            
+            data = {
+                'consolidateHeader': '1',
+                'consolidateCitations': '1',
+                'includeRawCitations': '1',
+                'includeRawAffiliations': '1',
+                'teiCoordinates': 'true'
+            }
+            response = await self._post_with_retries(f"{self.grobid_url}/api/processFulltextDocument", files=files, data=data)
+            if not response or response.status_code != 200:
+                code = response.status_code if response else 'no-response'
+                raise ExtractionError(f"GROBID API error: {code}")
             return response.text
+
+    async def _get_with_retries(self, url: str) -> Optional[httpx.Response]:
+        max_retries = max(0, getattr(settings, 'grobid_max_retries', 2))
+        backoff = 1.0
+        last_err = None
+        for attempt in range(max_retries + 1):
+            try:
+                resp = await self.client.get(url)
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    last_err = f"HTTP {resp.status_code}"
+                    raise httpx.HTTPStatusError("transient", request=resp.request, response=resp)
+                return resp
+            except (httpx.TimeoutException, httpx.HTTPError) as e:
+                last_err = str(e)
+                if attempt < max_retries:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                logger.warning(f"GROBID GET failed after retries: {last_err}")
+                return None
+            except Exception as e:
+                logger.warning(f"GROBID GET unexpected error: {e}")
+                return None
+
+    async def _post_with_retries(self, url: str, *, files=None, data=None) -> Optional[httpx.Response]:
+        max_retries = max(0, getattr(settings, 'grobid_max_retries', 2))
+        backoff = 1.0
+        last_err = None
+        for attempt in range(max_retries + 1):
+            try:
+                resp = await self.client.post(url, files=files, data=data)
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    last_err = f"HTTP {resp.status_code}"
+                    raise httpx.HTTPStatusError("transient", request=resp.request, response=resp)
+                return resp
+            except (httpx.TimeoutException, httpx.HTTPError) as e:
+                last_err = str(e)
+                if attempt < max_retries:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                logger.error(f"GROBID POST failed after retries: {last_err}")
+                return None
+            except Exception as e:
+                logger.error(f"GROBID POST unexpected error: {e}")
+                return None
     
     def _extract_metadata(self, root: ET.Element) -> Metadata:
         """Extract metadata from TEI header"""

@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     figure_canny_low: int = 30                 # Canny low threshold for contours
     figure_canny_high: int = 100               # Canny high threshold for contours
     figure_use_clahe: bool = True              # Apply CLAHE on grayscale
+
+    # GROBID Configuration
+    grobid_timeout: int = 180
+    grobid_max_retries: int = 2
     
     # RabbitMQ Configuration
     rabbitmq_host: str = "localhost"
