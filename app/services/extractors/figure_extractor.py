@@ -912,6 +912,14 @@ class FigureExtractor:
         """Multi-scale approach for figure detection"""
         candidates = []
         
+        # Optional CLAHE preprocessing for improved contrast before contours
+        if settings.figure_use_clahe:
+            try:
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                gray = clahe.apply(gray)
+            except Exception:
+                pass
+
         # 1) Contours (good for photos/heatmaps)
         contour_candidates = await self._detect_figures_by_contours(img, gray, page_num, page)
         candidates.extend(contour_candidates)
@@ -929,7 +937,10 @@ class FigureExtractor:
                                   page_num: int, page) -> List[FigureCandidate]:
         """Detect figures using contour analysis with clustering and content snapping"""
         candidates = []
-        edges = cv2.Canny(gray, 30, 100)
+        # Use configurable Canny thresholds
+        low = getattr(settings, 'figure_canny_low', 30)
+        high = getattr(settings, 'figure_canny_high', 100)
+        edges = cv2.Canny(gray, low, high)
         edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)))
         
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -948,8 +959,11 @@ class FigureExtractor:
                 1/self.MAX_STRIP_ASPECT_RATIO <= ar <= self.MAX_STRIP_ASPECT_RATIO):
                 raw_boxes.append((x, y, w, h))
 
+        # Optional NMS to reduce overlaps before clustering
+        nms_boxes = self._nms_boxes(raw_boxes, iou_threshold=getattr(settings, 'figure_iou_threshold', 0.6))
+
         # Merge nearby fragments
-        merged = self._cluster_boxes(raw_boxes, gap=40)
+        merged = self._cluster_boxes(nms_boxes, gap=40)
 
         # Snap merged boxes to content to cover full figure
         snapped = [self._snap_to_content(gray, x, y, w, h) for (x, y, w, h) in merged]
@@ -1010,6 +1024,36 @@ class FigureExtractor:
             if not merged_flag:
                 merged.append(b)
         return merged
+
+    def _nms_boxes(self, boxes, iou_threshold=0.6):
+        """Non-maximum suppression on (x,y,w,h) boxes using IoU in pixel space."""
+        if not boxes:
+            return []
+        # Convert to (x1,y1,x2,y2)
+        bxyxy = [(x, y, x+w, y+h) for (x,y,w,h) in boxes]
+        # Sort by area desc (keep larger first)
+        areas = [max(1, (bx2-bx1) * (by2-by1)) for (bx1,by1,bx2,by2) in bxyxy]
+        order = sorted(range(len(bxyxy)), key=lambda i: areas[i], reverse=True)
+        kept = []
+        while order:
+            i = order.pop(0)
+            kept.append(bxyxy[i])
+            rest = []
+            xi1, yi1, xi2, yi2 = bxyxy[i]
+            ai = areas[i]
+            for j in order:
+                xj1, yj1, xj2, yj2 = bxyxy[j]
+                # intersection
+                xx1 = max(xi1, xj1); yy1 = max(yi1, yj1)
+                xx2 = min(xi2, xj2); yy2 = min(yi2, yj2)
+                inter = max(0, xx2-xx1) * max(0, yy2-yy1)
+                aj = areas[j]
+                iou = inter / float(ai + aj - inter)
+                if iou <= iou_threshold:
+                    rest.append(j)
+            order = rest
+        # Back to (x,y,w,h)
+        return [(x1, y1, x2-x1, y2-y1) for (x1,y1,x2,y2) in kept]
 
     def _snap_to_content(self, gray, x, y, w, h):
         """

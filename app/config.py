@@ -80,6 +80,13 @@ class Settings(BaseSettings):
     ocr_timeout: int = 30
     ocr_max_retries: int = 2
     ocr_preprocess: bool = True
+
+    # Figure Detection Configuration
+    figure_iou_threshold: float = 0.6          # IoU for deduplication
+    figure_filter_text_regions: bool = True    # filter paragraph-like regions
+    figure_canny_low: int = 30                 # Canny low threshold for contours
+    figure_canny_high: int = 100               # Canny high threshold for contours
+    figure_use_clahe: bool = True              # Apply CLAHE on grayscale
     
     # RabbitMQ Configuration
     rabbitmq_host: str = "localhost"
