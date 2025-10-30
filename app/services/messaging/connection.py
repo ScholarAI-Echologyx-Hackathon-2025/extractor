@@ -42,30 +42,35 @@ class RabbitMQConnection:
         Returns:
             bool: True if connection successful, False otherwise
         """
-        try:
-            logger.info(f"🔗 Connecting to RabbitMQ at {settings.rabbitmq_host}:{settings.rabbitmq_port}")
-            
-            # Build connection URL
-            if settings.rabbitmq_user and settings.rabbitmq_password:
-                connection_url = (
-                    f"amqp://{settings.rabbitmq_user}:{settings.rabbitmq_password}"
-                    f"@{settings.rabbitmq_host}:{settings.rabbitmq_port}/"
-                )
-            else:
-                connection_url = f"amqp://{settings.rabbitmq_host}:{settings.rabbitmq_port}/"
-            
-            # Establish connection
-            self.connection = await connect_robust(connection_url)
-            self.channel = await self.connection.channel()
-            
-            self.is_connected = True
-            logger.info("✅ RabbitMQ connection established")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to connect to RabbitMQ: {str(e)}")
-            self.is_connected = False
-            return False
+        max_retries = max(0, getattr(settings, 'rabbitmq_max_retries', 3))
+        backoff = max(0.1, float(getattr(settings, 'rabbitmq_retry_backoff', 1.0)))
+        last_err = None
+        logger.info(f"🔗 Connecting to RabbitMQ at {settings.rabbitmq_host}:{settings.rabbitmq_port}")
+        # Build connection URL
+        if settings.rabbitmq_user and settings.rabbitmq_password:
+            connection_url = (
+                f"amqp://{settings.rabbitmq_user}:{settings.rabbitmq_password}"
+                f"@{settings.rabbitmq_host}:{settings.rabbitmq_port}/"
+            )
+        else:
+            connection_url = f"amqp://{settings.rabbitmq_host}:{settings.rabbitmq_port}/"
+
+        for attempt in range(max_retries + 1):
+            try:
+                self.connection = await connect_robust(connection_url)
+                self.channel = await self.connection.channel()
+                self.is_connected = True
+                logger.info("✅ RabbitMQ connection established")
+                return True
+            except Exception as e:
+                last_err = e
+                self.is_connected = False
+                if attempt < max_retries:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                logger.error(f"❌ Failed to connect to RabbitMQ after retries: {str(last_err)}")
+                return False
 
     async def setup_queues(self) -> bool:
         """
@@ -78,7 +83,10 @@ class RabbitMQConnection:
             logger.error("❌ Cannot setup queues: not connected to RabbitMQ")
             return False
             
-        try:
+        max_retries = max(0, getattr(settings, 'rabbitmq_max_retries', 3))
+        backoff = max(0.1, float(getattr(settings, 'rabbitmq_retry_backoff', 1.0)))
+        for attempt in range(max_retries + 1):
+            try:
             logger.info("🛠️ Setting up RabbitMQ exchanges and queues for extraction...")
             
             # Declare exchange
@@ -108,10 +116,14 @@ class RabbitMQConnection:
             logger.info("✅ RabbitMQ extraction queues and exchanges setup complete")
             return True
             
-        except Exception as e:
-            logger.error(f"❌ Failed to setup extraction queues: {str(e)}")
-            self.is_setup = False
-            return False
+            except Exception as e:
+                self.is_setup = False
+                if attempt < max_retries:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                logger.error(f"❌ Failed to setup extraction queues after retries: {str(e)}")
+                return False
 
     async def publish_message(
         self, 

@@ -91,7 +91,11 @@ class Settings(BaseSettings):
     # GROBID Configuration
     grobid_timeout: int = 180
     grobid_max_retries: int = 2
-    
+
+    # Cloudinary Configuration (retries)
+    cloudinary_max_retries: int = 2
+    cloudinary_retry_backoff: float = 1.0
+
     # RabbitMQ Configuration
     rabbitmq_host: str = "localhost"
     rabbitmq_port: int = 5672
@@ -102,6 +106,8 @@ class Settings(BaseSettings):
     rabbitmq_extraction_completed_queue: str = "scholarai.extraction.completed.queue"
     rabbitmq_extraction_routing_key: str = "scholarai.extraction"
     rabbitmq_extraction_completed_routing_key: str = "scholarai.extraction.completed"
+    rabbitmq_max_retries: int = 3
+    rabbitmq_retry_backoff: float = 1.0
     
     class Config:
         env_file = ".env"

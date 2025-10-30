@@ -62,6 +62,23 @@ class CloudinaryService:
             logger.error(f"Failed to initialize Cloudinary service: {e}")
             self.is_configured = False
     
+    async def _upload_with_retries(self, func):
+        """Execute a blocking upload function with retry/backoff in executor."""
+        max_retries = max(0, getattr(settings, 'cloudinary_max_retries', 2))
+        backoff = max(0.1, float(getattr(settings, 'cloudinary_retry_backoff', 1.0)))
+        last_err = None
+        for attempt in range(max_retries + 1):
+            try:
+                return await asyncio.get_event_loop().run_in_executor(None, func)
+            except Exception as e:
+                last_err = e
+                if attempt < max_retries:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2
+                    continue
+                logger.error(f"Cloudinary upload failed after retries: {last_err}")
+                return None
+
     async def upload_image_from_path(self, image_path: Path, folder: str = "scholarai/figures") -> Optional[str]:
         """Upload image from file path to Cloudinary"""
         if not self.is_configured:
@@ -69,9 +86,8 @@ class CloudinaryService:
             return None
         
         try:
-            # Upload image to Cloudinary
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
+            # Upload image to Cloudinary with retries
+            result = await self._upload_with_retries(
                 lambda: cloudinary.uploader.upload(
                     str(image_path),
                     folder=folder,
@@ -104,9 +120,8 @@ class CloudinaryService:
             return None
         
         try:
-            # Upload image bytes to Cloudinary
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
+            # Upload image bytes to Cloudinary with retries
+            result = await self._upload_with_retries(
                 lambda: cloudinary.uploader.upload(
                     io.BytesIO(image_bytes),
                     public_id=filename,
@@ -189,8 +204,7 @@ class CloudinaryService:
                 resource_type = 'raw'
             
             # Upload file to Cloudinary
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
+            result = await self._upload_with_retries(
                 lambda: cloudinary.uploader.upload(
                     file_path,
                     folder=folder,
@@ -232,8 +246,7 @@ class CloudinaryService:
             file_obj = io.BytesIO(file_bytes)
             
             # Upload bytes to Cloudinary
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
+            result = await self._upload_with_retries(
                 lambda: cloudinary.uploader.upload(
                     file_obj,
                     folder=folder,
