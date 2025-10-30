@@ -1858,11 +1858,11 @@ class FigureExtractor:
             # Extract text using OCR manager
             ocr_result = await self.ocr_manager.extract_text(image_path)
             
-            if ocr_result and ocr_result.text.strip():
-                candidate.ocr_text = ocr_result.text
-                candidate.ocr_confidence = ocr_result.confidence
+            if ocr_result and ocr_result.get('text', '').strip():
+                candidate.ocr_text = ocr_result.get('text', '')
+                candidate.ocr_confidence = ocr_result.get('confidence')
                 
-                logger.debug(f"OCR extracted from figure {candidate.label}: {len(ocr_result.text)} chars, confidence: {ocr_result.confidence:.2f}, provider: {ocr_result.provider}")
+                logger.debug(f"OCR extracted from figure {candidate.label}: {len(ocr_result.get('text', ''))} chars, confidence: {ocr_result.get('confidence')}, provider: {ocr_result.get('provider')}")
             
         except Exception as e:
             logger.warning(f"OCR extraction failed for figure {candidate.label}: {e}")
@@ -1895,11 +1895,11 @@ class FigureExtractor:
             # Extract text using OCR manager
             ocr_result = await self.ocr_manager.extract_text_from_bytes(img_data)
             
-            if ocr_result and ocr_result.text.strip():
-                candidate.ocr_text = ocr_result.text
-                candidate.ocr_confidence = ocr_result.confidence
+            if ocr_result and ocr_result.get('text', '').strip():
+                candidate.ocr_text = ocr_result.get('text', '')
+                candidate.ocr_confidence = ocr_result.get('confidence')
                 
-                logger.debug(f"OCR extracted from PDF region {candidate.label}: {len(ocr_result.text)} chars, confidence: {ocr_result.confidence:.2f}, provider: {ocr_result.provider}")
+                logger.debug(f"OCR extracted from PDF region {candidate.label}: {len(ocr_result.get('text', ''))} chars, confidence: {ocr_result.get('confidence')}, provider: {ocr_result.get('provider')}")
             
             doc.close()
             

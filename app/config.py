@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     # OCR Configuration
     ocr_space_api_key: Optional[str] = None
     use_ocr: bool = True
+    ocr_language: str = "eng"
+    ocr_timeout: int = 30
+    ocr_max_retries: int = 2
+    ocr_preprocess: bool = True
     
     # RabbitMQ Configuration
     rabbitmq_host: str = "localhost"
