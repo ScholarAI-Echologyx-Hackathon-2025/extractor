@@ -1,0 +1,87 @@
+ # Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Project specific - Ignore entire paper folder and all its contents
+paper/
+paper/*
+paper/**/*
+paper/uploads/
+paper/results/
+paper/figures/
+paper/tables/
+paper/code/
+paper/ocr_math/
+paper/json/
+paper/text/
+paper/config/
+paper/*.pdf
+paper/*_extraction.json
+paper/*_summary.txt
+paper/extraction_performance.json
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*~
+
+# Large files
+*.jar
+
+
+# Test files
+test_*.pdf
+sample_*.pdf
+
+# Cache
+.cache/
+__pycache__/
+*.pyc
+cache/
+cache/huggingface/
+cache/torch/
+cache/easyocr/
+
+# OS
+Thumbs.db
+.DS_Store
+._.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb

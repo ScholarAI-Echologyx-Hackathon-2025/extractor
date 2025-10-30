@@ -1,0 +1,58 @@
+# Core Framework
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+pydantic==2.6.1
+pydantic-settings==2.2.1
+
+# PDF Processing (Lightweight)
+pdfplumber==0.11.7
+pymupdf==1.23.22
+
+# Table Processing (Rule-based only)
+pandas==2.3.2
+jpype1==1.5.1
+tabula-py==2.10.0
+
+# Document Processing
+pygments==2.19.2
+
+# API Clients
+httpx==0.26.0
+
+# NLP & Text Processing (Basic)
+textstat==0.7.3
+
+# Utilities
+python-dotenv==1.0.1
+
+# Logging & Monitoring
+loguru==0.7.2
+
+# Cloud Storage
+b2sdk==1.21.0
+cloudinary==1.36.0
+
+# Message Queue
+aio-pika==9.3.1
+
+# Image Processing (Essential for figure extraction)
+opencv-python-headless==4.8.1.78
+pillow==10.2.0
+
+# Numerical Computing (Essential for image processing)
+numpy==1.26.4
+
+# REMOVED: Heavy AI models (torch, transformers, easyocr)
+# REMOVED: Large ML libraries (scikit-image, matplotlib)
+# REMOVED: Complex NLP (spacy, nltk)
+# REMOVED: Math processing (sympy, latex2sympy2)
+# REMOVED: Development dependencies (pytest, black, flake8, mypy, pre-commit)
+# REMOVED: Additional utilities (tqdm, colorama, pyyaml)
+# REMOVED: External services (redis, celery)
+# REMOVED: Additional API clients (aiohttp, requests)
+# REMOVED: Document processing (python-docx, beautifulsoup4, lxml, markdown)
+# REMOVED: Image processing (scikit-image, matplotlib)
+# REMOVED: Table utilities (tabulate, openpyxl)
+# REMOVED: Monitoring (sentry-sdk)
+# REMOVED: OCR dependencies (pytesseract - using OCR.space API instead)
