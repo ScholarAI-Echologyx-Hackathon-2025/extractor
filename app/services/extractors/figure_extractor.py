@@ -958,6 +958,13 @@ class FigureExtractor:
         scale = page.rect.width / W
         for i, (x, y, w, h) in enumerate(snapped):
             roi = img[y:y+h, x:x+w]
+            # Skip regions that look like paragraphs or mostly text
+            try:
+                gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if len(roi.shape) == 3 else roi
+            except Exception:
+                gray_roi = roi
+            if self._is_mostly_text_region(gray_roi):
+                continue
             if not self._validate_figure_region(roi):
                 continue
 
@@ -2108,19 +2115,37 @@ class FigureExtractor:
         """Remove duplicate figure candidates based on bounding box overlap"""
         if not candidates:
             return []
-        
-        unique_candidates = []
-        for candidate in candidates:
-            is_duplicate = False
-            for existing in unique_candidates:
-                if self._calculate_overlap(candidate.bbox, existing.bbox) > 0.7:
-                    is_duplicate = True
+
+        # Method priority: prefer higher quality extraction methods when overlaps occur
+        method_priority = {
+            'pdfplumber': 5,
+            'chart_axes_grouped': 4,
+            'chart_axes': 3,
+            'pymupdf': 2,
+            'cv_contour': 1,
+        }
+
+        def rank(c: FigureCandidate) -> tuple:
+            return (
+                method_priority.get(c.method, 0),
+                c.confidence,
+            )
+
+        # Sort by priority then confidence (descending)
+        sorted_cands = sorted(candidates, key=rank, reverse=True)
+
+        kept: List[FigureCandidate] = []
+        for cand in sorted_cands:
+            overlapped = False
+            for k in kept:
+                iou = self._calculate_overlap(cand.bbox, k.bbox)
+                if iou > 0.6:  # slightly lower threshold to merge near-duplicates
+                    overlapped = True
                     break
-            
-            if not is_duplicate:
-                unique_candidates.append(candidate)
-        
-        return unique_candidates
+            if not overlapped:
+                kept.append(cand)
+
+        return kept
     
     def _calculate_overlap(self, bbox1: BoundingBox, bbox2: BoundingBox) -> float:
         """Calculate overlap ratio between two bounding boxes"""
