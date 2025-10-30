@@ -1,0 +1,80 @@
+services:
+  extractor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scholar-extractor
+
+    # 🏷️ Add metadata labels for cleanup & observability
+    labels:
+      service: "extractor"
+      maintainer: "ScholarAI <dev@scholarai.local>"
+      version: "0.0.1-SNAPSHOT"
+      description: "PDF Extractor AI Agent for ScholarAI"
+    env_file:
+      - /opt/scholarai/envs/extractor.env
+    ports:
+      - "8002:8002"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8002
+      - DEBUG=False
+      - LOG_LEVEL=INFO
+      - RABBITMQ_HOST=user-rabbitmq
+      - RABBITMQ_PORT=5672
+      - GROBID_URL=http://pdf_extractor_grobid:8070
+      # REDIS_URL removed - cache not implemented
+      - HF_HOME=/app/cache/huggingface
+      - TORCH_HOME=/app/cache/torch
+      # Memory optimization: cap native/lib threads
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - VECLIB_MAXIMUM_THREADS=1
+      - BLAS_NUM_THREADS=1
+      - LAPACK_NUM_THREADS=1
+      # reduce glibc arena fragmentation for many threads
+      - MALLOC_ARENA_MAX=2
+      # faster logs, fewer buffers
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./paper:/app/paper
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+      - ./uploads:/app/uploads
+    networks:
+      - scholarai-network
+    restart: unless-stopped
+
+    # —— Resource controls (Optimized for Size & Memory) ——
+    cpus: 0.75
+    cpu_shares: 512
+    mem_limit: 1024m
+    mem_reservation: 768m
+    # Reduced swap limit
+    memswap_limit: 1.5g
+
+    # contain process count; reap zombies
+    pids_limit: 128
+    init: true
+
+    # Reduced shared memory
+    shm_size: "128m"
+
+    ulimits:
+      nofile:
+        soft: 16384
+        hard: 16384
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  scholarai-network:
+    external: true
+    name: docker_scholarai-network
