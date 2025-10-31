@@ -912,14 +912,6 @@ class FigureExtractor:
         """Multi-scale approach for figure detection"""
         candidates = []
         
-        # Optional CLAHE preprocessing for improved contrast before contours
-        if settings.figure_use_clahe:
-            try:
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                gray = clahe.apply(gray)
-            except Exception:
-                pass
-
         # 1) Contours (good for photos/heatmaps)
         contour_candidates = await self._detect_figures_by_contours(img, gray, page_num, page)
         candidates.extend(contour_candidates)
@@ -937,10 +929,7 @@ class FigureExtractor:
                                   page_num: int, page) -> List[FigureCandidate]:
         """Detect figures using contour analysis with clustering and content snapping"""
         candidates = []
-        # Use configurable Canny thresholds
-        low = getattr(settings, 'figure_canny_low', 30)
-        high = getattr(settings, 'figure_canny_high', 100)
-        edges = cv2.Canny(gray, low, high)
+        edges = cv2.Canny(gray, 30, 100)
         edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)))
         
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -959,11 +948,8 @@ class FigureExtractor:
                 1/self.MAX_STRIP_ASPECT_RATIO <= ar <= self.MAX_STRIP_ASPECT_RATIO):
                 raw_boxes.append((x, y, w, h))
 
-        # Optional NMS to reduce overlaps before clustering
-        nms_boxes = self._nms_boxes(raw_boxes, iou_threshold=getattr(settings, 'figure_iou_threshold', 0.6))
-
         # Merge nearby fragments
-        merged = self._cluster_boxes(nms_boxes, gap=40)
+        merged = self._cluster_boxes(raw_boxes, gap=40)
 
         # Snap merged boxes to content to cover full figure
         snapped = [self._snap_to_content(gray, x, y, w, h) for (x, y, w, h) in merged]
@@ -972,13 +958,6 @@ class FigureExtractor:
         scale = page.rect.width / W
         for i, (x, y, w, h) in enumerate(snapped):
             roi = img[y:y+h, x:x+w]
-            # Skip regions that look like paragraphs or mostly text
-            try:
-                gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY) if len(roi.shape) == 3 else roi
-            except Exception:
-                gray_roi = roi
-            if self._is_mostly_text_region(gray_roi):
-                continue
             if not self._validate_figure_region(roi):
                 continue
 
@@ -1024,36 +1003,6 @@ class FigureExtractor:
             if not merged_flag:
                 merged.append(b)
         return merged
-
-    def _nms_boxes(self, boxes, iou_threshold=0.6):
-        """Non-maximum suppression on (x,y,w,h) boxes using IoU in pixel space."""
-        if not boxes:
-            return []
-        # Convert to (x1,y1,x2,y2)
-        bxyxy = [(x, y, x+w, y+h) for (x,y,w,h) in boxes]
-        # Sort by area desc (keep larger first)
-        areas = [max(1, (bx2-bx1) * (by2-by1)) for (bx1,by1,bx2,by2) in bxyxy]
-        order = sorted(range(len(bxyxy)), key=lambda i: areas[i], reverse=True)
-        kept = []
-        while order:
-            i = order.pop(0)
-            kept.append(bxyxy[i])
-            rest = []
-            xi1, yi1, xi2, yi2 = bxyxy[i]
-            ai = areas[i]
-            for j in order:
-                xj1, yj1, xj2, yj2 = bxyxy[j]
-                # intersection
-                xx1 = max(xi1, xj1); yy1 = max(yi1, yj1)
-                xx2 = min(xi2, xj2); yy2 = min(yi2, yj2)
-                inter = max(0, xx2-xx1) * max(0, yy2-yy1)
-                aj = areas[j]
-                iou = inter / float(ai + aj - inter)
-                if iou <= iou_threshold:
-                    rest.append(j)
-            order = rest
-        # Back to (x,y,w,h)
-        return [(x1, y1, x2-x1, y2-y1) for (x1,y1,x2,y2) in kept]
 
     def _snap_to_content(self, gray, x, y, w, h):
         """
@@ -1909,11 +1858,11 @@ class FigureExtractor:
             # Extract text using OCR manager
             ocr_result = await self.ocr_manager.extract_text(image_path)
             
-            if ocr_result and ocr_result.get('text', '').strip():
-                candidate.ocr_text = ocr_result.get('text', '')
-                candidate.ocr_confidence = ocr_result.get('confidence')
+            if ocr_result and ocr_result.text.strip():
+                candidate.ocr_text = ocr_result.text
+                candidate.ocr_confidence = ocr_result.confidence
                 
-                logger.debug(f"OCR extracted from figure {candidate.label}: {len(ocr_result.get('text', ''))} chars, confidence: {ocr_result.get('confidence')}, provider: {ocr_result.get('provider')}")
+                logger.debug(f"OCR extracted from figure {candidate.label}: {len(ocr_result.text)} chars, confidence: {ocr_result.confidence:.2f}, provider: {ocr_result.provider}")
             
         except Exception as e:
             logger.warning(f"OCR extraction failed for figure {candidate.label}: {e}")
@@ -1946,11 +1895,11 @@ class FigureExtractor:
             # Extract text using OCR manager
             ocr_result = await self.ocr_manager.extract_text_from_bytes(img_data)
             
-            if ocr_result and ocr_result.get('text', '').strip():
-                candidate.ocr_text = ocr_result.get('text', '')
-                candidate.ocr_confidence = ocr_result.get('confidence')
+            if ocr_result and ocr_result.text.strip():
+                candidate.ocr_text = ocr_result.text
+                candidate.ocr_confidence = ocr_result.confidence
                 
-                logger.debug(f"OCR extracted from PDF region {candidate.label}: {len(ocr_result.get('text', ''))} chars, confidence: {ocr_result.get('confidence')}, provider: {ocr_result.get('provider')}")
+                logger.debug(f"OCR extracted from PDF region {candidate.label}: {len(ocr_result.text)} chars, confidence: {ocr_result.confidence:.2f}, provider: {ocr_result.provider}")
             
             doc.close()
             
@@ -2159,37 +2108,19 @@ class FigureExtractor:
         """Remove duplicate figure candidates based on bounding box overlap"""
         if not candidates:
             return []
-
-        # Method priority: prefer higher quality extraction methods when overlaps occur
-        method_priority = {
-            'pdfplumber': 5,
-            'chart_axes_grouped': 4,
-            'chart_axes': 3,
-            'pymupdf': 2,
-            'cv_contour': 1,
-        }
-
-        def rank(c: FigureCandidate) -> tuple:
-            return (
-                method_priority.get(c.method, 0),
-                c.confidence,
-            )
-
-        # Sort by priority then confidence (descending)
-        sorted_cands = sorted(candidates, key=rank, reverse=True)
-
-        kept: List[FigureCandidate] = []
-        for cand in sorted_cands:
-            overlapped = False
-            for k in kept:
-                iou = self._calculate_overlap(cand.bbox, k.bbox)
-                if iou > 0.6:  # slightly lower threshold to merge near-duplicates
-                    overlapped = True
+        
+        unique_candidates = []
+        for candidate in candidates:
+            is_duplicate = False
+            for existing in unique_candidates:
+                if self._calculate_overlap(candidate.bbox, existing.bbox) > 0.7:
+                    is_duplicate = True
                     break
-            if not overlapped:
-                kept.append(cand)
-
-        return kept
+            
+            if not is_duplicate:
+                unique_candidates.append(candidate)
+        
+        return unique_candidates
     
     def _calculate_overlap(self, bbox1: BoundingBox, bbox2: BoundingBox) -> float:
         """Calculate overlap ratio between two bounding boxes"""

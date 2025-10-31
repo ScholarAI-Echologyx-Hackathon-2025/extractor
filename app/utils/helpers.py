@@ -8,46 +8,6 @@ import numpy as np
 from PIL import Image
 import io
 from loguru import logger
-import asyncio
-from typing import Callable, Awaitable, Type, Tuple, Iterable, Optional as TypingOptional
-
-
-async def async_retry(
-    op: Callable[[], Awaitable[Any]],
-    *,
-    max_retries: int = 2,
-    backoff_initial: float = 1.0,
-    exceptions: Iterable[Type[BaseException]] = (Exception,),
-    on_error: TypingOptional[Callable[[BaseException, int], None]] = None,
-) -> Any:
-    """Generic async retry helper with exponential backoff.
-
-    Args:
-        op: async callable producing the awaited result
-        max_retries: number of retries (in addition to the first attempt)
-        backoff_initial: initial backoff seconds; doubles each retry
-        exceptions: exception types that trigger a retry
-        on_error: optional hook called with (error, attempt_index)
-
-    Returns:
-        Result of op() or raises last exception if exhausted.
-    """
-    attempt = 0
-    backoff = max(0.0, backoff_initial)
-    while True:
-        try:
-            return await op()
-        except exceptions as e:
-            if on_error:
-                try:
-                    on_error(e, attempt)
-                except Exception:
-                    pass
-            if attempt >= max_retries:
-                raise
-            await asyncio.sleep(backoff)
-            backoff = backoff * 2 if backoff > 0 else 0
-            attempt += 1
 
 
 def validate_pdf(file_path: Path) -> bool:

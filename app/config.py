@@ -76,26 +76,7 @@ class Settings(BaseSettings):
     # OCR Configuration
     ocr_space_api_key: Optional[str] = None
     use_ocr: bool = True
-    ocr_language: str = "eng"
-    ocr_timeout: int = 30
-    ocr_max_retries: int = 2
-    ocr_preprocess: bool = True
-
-    # Figure Detection Configuration
-    figure_iou_threshold: float = 0.6          # IoU for deduplication
-    figure_filter_text_regions: bool = True    # filter paragraph-like regions
-    figure_canny_low: int = 30                 # Canny low threshold for contours
-    figure_canny_high: int = 100               # Canny high threshold for contours
-    figure_use_clahe: bool = True              # Apply CLAHE on grayscale
-
-    # GROBID Configuration
-    grobid_timeout: int = 180
-    grobid_max_retries: int = 2
-
-    # Cloudinary Configuration (retries)
-    cloudinary_max_retries: int = 2
-    cloudinary_retry_backoff: float = 1.0
-
+    
     # RabbitMQ Configuration
     rabbitmq_host: str = "localhost"
     rabbitmq_port: int = 5672
@@ -106,8 +87,6 @@ class Settings(BaseSettings):
     rabbitmq_extraction_completed_queue: str = "scholarai.extraction.completed.queue"
     rabbitmq_extraction_routing_key: str = "scholarai.extraction"
     rabbitmq_extraction_completed_routing_key: str = "scholarai.extraction.completed"
-    rabbitmq_max_retries: int = 3
-    rabbitmq_retry_backoff: float = 1.0
     
     class Config:
         env_file = ".env"
